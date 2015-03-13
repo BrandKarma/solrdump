@@ -9,7 +9,7 @@ Both of Solr and Elasticsearch are built on Lucene. However, when you would like
 
 ### Mac OS X
 
-  * Homebrew
+In order to run clojure program, you need leinigen in your system. the easiest way to install on Mac OS X is by homebrew
 
 ```
 brew install leiningen
@@ -18,8 +18,21 @@ brew install leiningen
 
 ## Usage
 
+  * print usage prompt
 ```
-lein run
+➜  solrdump git:(master) ✗ lein run
+
+This program reads solr’s lucene index and convert it into json.
+
+Usage: program-name [options] index-path
+
+Options:
+  -h, --help  print the help desc
+```
+
+   * print the content of solr segment
+```
+➜  solrdump git:(master) ✗ lein run test/data/solr-segment
 ```
 
 ## License
