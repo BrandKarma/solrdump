@@ -27,9 +27,9 @@
 (defn index-2-json
   [^Document doc]
   "converting raw lucene index to json"
-  (let [json_output (reduce conj #{} 
+  (let [json_output (reduce conj {} 
             (for [field (iterator-seq (.iterator doc))]
-              [(.name field) (.stringValue field)]
+              {(.name field) (.stringValue field)}
             )
         )]
     (println (generate-string json_output))
@@ -84,7 +84,7 @@
                 (println (format "%d" doc_num))
                 (doseq [i (range doc_num)]
                   (let [doc (.document reader i)]
-                    (println (.toString doc))
+                    (index-2-json doc)
                   )
                 )
               )
