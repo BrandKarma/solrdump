@@ -1,12 +1,15 @@
 (ns solrdump.core
-  (:require [clojure.java.jdbc])
+  (:require [jdbc.core :as jdbc]
+            [jdbc.proto :as types])
   (:import (org.postgresql.ds PGPoolingDataSource))
+  (:import (org.postgresql.util PGobject))
   (:import (java.io File)
            (org.apache.lucene.document Document)
            (org.apache.lucene.index IndexReader DirectoryReader)
            (org.apache.lucene.store Directory NIOFSDirectory RAMDirectory)
            )
-  (:require [cheshire.core :refer :all]
+  (:require [clojure.data.json :as json]
+            [cheshire.core :as cheshire]
             [clucy.core :as clucy]
             [clojure.tools.cli :refer [parse-opts]]
             [clojure.string :as string]
@@ -14,6 +17,38 @@
             )
   (:use carica.core)
 )
+
+
+;; ISQLType handles a conversion from user type to jdbc compatible
+;; types. In this case we are extending any implementation of clojure
+;; IPersistentMap (for convert it to json string).
+(extend-protocol types/ISQLType
+  clojure.lang.IPersistentMap
+
+  ;; This method, receives a instance of IPersistentMap and
+  ;; active connection, and return jdbc compatible type.
+  (as-sql-type [self conn]
+    (doto (PGobject.)
+      (.setType "jsonb")
+      (.setValue (json/write-str self))))
+
+  ;; This method handles assignation of now converted type
+  ;; to jdbc statement instance.
+  (set-stmt-parameter! [self conn stmt index]
+    (.setObject stmt index (types/as-sql-type self conn))))
+
+;; ISQLResultSetReadColumn handles the conversion from sql types
+;; to user types. In this case, we are extending PGobject for handle
+;; json field conversions to clojure hash-map.
+(extend-protocol types/ISQLResultSetReadColumn
+  PGobject
+  (from-sql-type [pgobj conn metadata i]
+    (let [type  (.getType pgobj)
+          value (.getValue pgobj)]
+      (case type
+        "jsonb" (json/read-str value)
+        :else value))))
+
 
 (defn disk-index
   [^String dir-path]
@@ -30,7 +65,7 @@
 
 
 (defn save-to-postgres
-  [^String json_str]
+  [json_obj]
   "inserting lucene index to postgres"
   (let [db-host (config :db :hostname)
         db-name (config :db :dbname)
@@ -38,23 +73,15 @@
         db-user (config :db :username)
         db-pass (config :db :password)]
 
-    ;(def db {:datasource (doto (new PGPoolingDataSource)
-                           ;(.setServerName   db-host)
-                           ;(.setDatabaseName db-name)
-                           ;(.setUser         db-user)
-                           ;(.setPassword     db-pass)
-                           ;(.setMaxConnections 3))})
+    (def dbspec {:subprotocol "postgresql"
+                 :subname (str "//" db-host ":" db-port "/" db-name)
+                 :user db-user
+                 :password db-pass}
+    )
 
-    (def db {:classname "org.postgresql.Driver"
-             :subprotocol "postgresql"
-             :subname (str "//" db-host ":" db-port "/" db-name)
-             :user db-user
-             :password db-pass})
-    (clojure.java.jdbc/with-connection
-      db
-      (clojure.java.jdbc/transaction
-        (clojure.java.jdbc/insert-values "units" ["payload"] [json_str])
-      )
+    (println (cheshire/generate-string json_obj))
+    (with-open [conn (jdbc/connection dbspec)]
+      (jdbc/execute conn ["insert into units (payload) values (?);" json_obj])
     )
   )
 )
@@ -68,7 +95,7 @@
                               {(.name field) (.stringValue field)}
                               )
                             )]
-    (handler (generate-string json_output))
+    (handler json_output)
   )
 )
 
@@ -141,3 +168,4 @@
     )
   )
 )
+
