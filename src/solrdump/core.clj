@@ -1,5 +1,5 @@
 (ns solrdump.core
-  (:require [clojure.java.jdbc :as jdbc])
+  (:require [clojure.java.jdbc])
   (:import (org.postgresql.ds PGPoolingDataSource))
   (:import (java.io File)
            (org.apache.lucene.document Document)
@@ -20,6 +20,7 @@
   (NIOFSDirectory. (File. dir-path))
 )
 
+
 (defn index-reader
   "create an IndexReader"
   ^IndexReader
@@ -27,29 +28,56 @@
   (DirectoryReader/open ^Directory index)
 )
 
+
 (defn save-to-postgres
-  [db ^Document doc]
+  [^String json_str]
   "inserting lucene index to postgres"
-  ()
+  (let [db-host (config :db :hostname)
+        db-name (config :db :dbname)
+        db-port (config :db :dbport)
+        db-user (config :db :username)
+        db-pass (config :db :password)]
+
+    ;(def db {:datasource (doto (new PGPoolingDataSource)
+                           ;(.setServerName   db-host)
+                           ;(.setDatabaseName db-name)
+                           ;(.setUser         db-user)
+                           ;(.setPassword     db-pass)
+                           ;(.setMaxConnections 3))})
+
+    (def db {:classname "org.postgresql.Driver"
+             :subprotocol "postgresql"
+             :subname (str "//" db-host ":" db-port "/" db-name)
+             :user db-user
+             :password db-pass})
+    (clojure.java.jdbc/with-connection
+      db
+      (clojure.java.jdbc/transaction
+        (clojure.java.jdbc/insert-values "units" ["payload"] [json_str])
+      )
+    )
+  )
 )
 
+
 (defn index-2-json
-  [^Document doc]
+  [handler, ^Document doc]
   "converting raw lucene index to json"
   (let [json_output (reduce conj {} 
                             (for [field (iterator-seq (.iterator doc))]
                               {(.name field) (.stringValue field)}
                               )
                             )]
-    (println (generate-string json_output))
-    )
+    (handler (generate-string json_output))
   )
+)
+
 
 (def cli-options
   [
      ["-h" "--help" "print the help desc" :default false :flag true]
      ["-c" "--config" "specify the configuration" :default false]
-     ["-O" "--output" "specify output filename" :default false]
+     ["-O" "--output" "specify output" :default false]
   ]  
 )
 
@@ -62,13 +90,13 @@
         options-summary
         ""]
        (string/join \newline))
-  )
+)
 
 
 (defn error-msg [errors]
   (str "The following errors occurred while parsing your command: \n\n"
        (string/join \newline errors))
-  )
+)
 
 
 (defn exit [status msg]
@@ -85,24 +113,6 @@
       errors (exit 1 (error-msg errors))
       )
 
-    (cond
-      (:config options) (
-          (cond
-            (= (config :db :protocol) "postgres")
-                         (let [db-host (config :db :hostname)
-                               db-name (config :db :dbname)
-                               db-user (config :db :username)
-                               db-pass (config :db :password)]
-                              (def db {:datasource (doto (new PGPoolingDataSource)
-                                                     (.setServerName   db-host)
-                                                     (.setDatabaseName db-name)
-                                                     (.setUser         db-user)
-                                                     (.setPassword     db-pass)
-                                                     (.setMaxConnections 3))}))
-          )
-      )
-      (:Output options) ()
-    )
 
     (let [index_path (first arguments)]
       (if (.exists (io/file index_path))
@@ -111,11 +121,11 @@
          (let [index (disk-index index_path)]
            (with-open [reader (index-reader index)]
              (let [doc_num (.numDocs reader)]
-               (println (format "%d" doc_num))
+               (println (format "doc count: %d " doc_num))
                (doseq [i (range doc_num)]
                  (try
                    (let [doc (.document reader i)]
-                     (index-2-json doc)
+                     (index-2-json save-to-postgres doc)
                    )
                    (catch Exception e (str "indexing document error: " (.getMessage e)))
                  )
