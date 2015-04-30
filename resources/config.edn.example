@@ -1,0 +1,5 @@
+{:db {:protocol "postgres"
+      :hostname "localhost"
+      :dbname   "test"
+      :username "test"
+      :password ""}}
