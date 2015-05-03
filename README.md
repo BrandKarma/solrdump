@@ -16,6 +16,21 @@ brew install leiningen
 ```
 
 
+## Configuration
+
+The script would store in Postgres’s column with BJSON type, you have to provide the database’s connection profile for the script to be able to connect to the database. The format is like the following.
+
+```
+{:db {:protocol "postgres"
+      :hostname "localhost"
+      :dbname   "test"
+      :username "test"
+      :password ""}}
+```
+
+Save it into the ``resources/config.edn``
+
+
 ## Usage
 
   * print usage prompt
