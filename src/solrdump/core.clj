@@ -81,7 +81,9 @@
 
     (println (cheshire/generate-string json_obj))
     (with-open [conn (jdbc/connection dbspec)]
-      (jdbc/execute conn ["insert into units (payload) values (?);" json_obj])
+      (let [prepared_sql (config :db :prepared_sql)]
+           (jdbc/execute conn [prepared_sql json_obj])
+      )
     )
   )
 )
@@ -103,7 +105,6 @@
 (def cli-options
   [
      ["-h" "--help" "print the help desc" :default false :flag true]
-     ["-c" "--config" "specify the configuration" :default false]
      ["-O" "--output" "specify output" :default false]
   ]  
 )
