@@ -79,13 +79,18 @@
                  :password db-pass}
     )
 
-    (println (cheshire/generate-string json_obj))
     (with-open [conn (jdbc/connection dbspec)]
       (let [prepared_sql (config :db :prepared_sql)]
            (jdbc/execute conn [prepared_sql json_obj])
       )
     )
   )
+)
+
+(defn print-to-console
+  [json_obj]
+  "print the json to scren"
+  (println (cheshire/generate-string json_obj))
 )
 
 
@@ -139,7 +144,7 @@
       (:help options) (exit 0 (usage summary))
       (not= (count arguments) 1) (exit 1 (usage summary))
       errors (exit 1 (error-msg errors))
-      )
+    )
 
 
     (let [index_path (first arguments)]
@@ -153,7 +158,10 @@
                (doseq [i (range doc_num)]
                  (try
                    (let [doc (.document reader i)]
-                     (index-2-json save-to-postgres doc)
+                     (cond
+                       (= (:output options) "postgres") (index-2-json save-to-postgres doc)
+                       :else (index-2-json print-to-console doc)
+                     )
                    )
                    (catch Exception e (str "indexing document error: " (.getMessage e)))
                  )
